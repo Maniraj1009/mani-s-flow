@@ -1231,7 +1231,7 @@
             canvas.height = img.naturalHeight;
             const ctx = canvas.getContext("2d");
             ctx.drawImage(img, 0, 0);
-            const dataUrl = canvas.toDataURL("image/jpeg", 0.95);
+            const dataUrl = canvas.toDataURL("image/png");
             if (dataUrl && dataUrl.startsWith("data:image")) return dataUrl;
           }
         } catch {}

@@ -671,10 +671,9 @@ function fileExtFromUrl(url) {
     const pathname = new URL(url).pathname.toLowerCase();
     if (pathname.includes(".mp4")) return "mp4";
     if (pathname.includes(".webm")) return "webm";
-    if (pathname.includes(".png")) return "png";
     if (pathname.includes(".webp")) return "webp";
   } catch {}
-  return "jpg";
+  return "png";
 }
 
 function safeFolderName(raw) {
@@ -715,17 +714,13 @@ async function downloadGeneratedImages(newUrls, serialNum, promptText) {
   // 1. Extract explicit timestamp if present in prompt line (e.g. "0:03 A red bike" -> ts: "0-03", prompt: "A red bike")
   const { timestamp: promptTs, cleanText } = parsePromptTimestamp(promptText);
 
-  // 2. Use first underscore_name from prompt as filename, fallback to prompt text
-  const detected  = extractAssetNames(cleanText);
-  const name      = detected.length ? detected[0] : safePromptName(cleanText);
-
-  // 3. Determine prefix style (timestamp vs serial vs none)
+  // 2. Determine prefix/numbering style (timestamp vs serial vs none)
   const formatChoice = namingFormatEl ? namingFormatEl.value : "timestamp";
 
-  let numberPrefix = "";
+  let baseName = "";
   if (promptTs) {
     // Explicit timestamp in prompt line always takes priority!
-    numberPrefix = `${promptTs}_`;
+    baseName = promptTs;
   } else if (formatChoice === "timestamp") {
     let stepSec = 3;
     if (typeof genSettings !== "undefined" && genSettings?.duration) {
@@ -733,10 +728,13 @@ async function downloadGeneratedImages(newUrls, serialNum, promptText) {
       if (!isNaN(parsedDur) && parsedDur > 0) stepSec = parsedDur;
     }
     const elapsedSec = (serialNum - 1) * stepSec;
-    numberPrefix = `${formatTimestamp(elapsedSec)}_`;
+    baseName = formatTimestamp(elapsedSec);
   } else if (formatChoice === "serial") {
-    const serial = String(serialNum).padStart(2, "0");
-    numberPrefix = `${serial}_`;
+    baseName = String(serialNum).padStart(2, "0");
+  } else {
+    // If format is "none", use prompt/asset name
+    const detected = extractAssetNames(cleanText);
+    baseName = detected.length ? detected[0] : safePromptName(cleanText);
   }
 
   for (let j = 0; j < newUrls.length; j++) {
@@ -745,7 +743,6 @@ async function downloadGeneratedImages(newUrls, serialNum, promptText) {
       url = "https://labs.google" + url;
     }
     const suffix   = newUrls.length > 1 ? `_${j + 1}` : "";
-    const baseName = `${numberPrefix}${name}`;
     const ext      = fileExtFromUrl(url);
     const filename = `${folder}/${prefix}${baseName}${suffix}.${ext}`;
 
