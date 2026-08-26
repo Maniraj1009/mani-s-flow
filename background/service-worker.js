@@ -10,9 +10,17 @@ chrome.runtime.onStartup.addListener(() => {
   });
 });
 
+const pendingFilenames = new Map();
+
 /* Enforce custom download filenames and prevent Chrome CDN hash overrides */
 if (chrome.downloads && chrome.downloads.onDeterminingFilename) {
   chrome.downloads.onDeterminingFilename.addListener((item, suggest) => {
+    if (pendingFilenames.has(item.id)) {
+      const targetFilename = pendingFilenames.get(item.id);
+      pendingFilenames.delete(item.id);
+      suggest({ filename: targetFilename, conflictAction: "uniquify" });
+      return true;
+    }
     if (item.byExtensionId === chrome.runtime.id && item.filename) {
       suggest({ filename: item.filename, conflictAction: "uniquify" });
       return true;
@@ -151,6 +159,46 @@ function mainWorldAgentClick() {
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg?.type === "DOWNLOAD_FILE") {
+    (async () => {
+      try {
+        let downloadUrl = msg.url;
+
+        // Fetch image bytes in background service worker (bypasses CORS restrictions)
+        if (msg.url && msg.url.startsWith("http")) {
+          try {
+            const response = await fetch(msg.url);
+            if (response.ok) {
+              const blob = await response.blob();
+              downloadUrl = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+              });
+            }
+          } catch (e) {
+            console.warn("[Mani's Flow] Background fetch failed, using original URL:", e);
+          }
+        }
+
+        const downloadId = await chrome.downloads.download({
+          url: downloadUrl,
+          filename: msg.filename,
+          saveAs: false,
+          conflictAction: "uniquify",
+        });
+
+        pendingFilenames.set(downloadId, msg.filename);
+        sendResponse({ ok: true, downloadId });
+      } catch (err) {
+        console.error("[Mani's Flow] Background download failed:", err);
+        sendResponse({ ok: false, error: String(err?.message || err) });
+      }
+    })();
+    return true;
+  }
+
   if (msg?.type === "MAIN_WORLD_AGENT_CLICK") {
     const tabId = sender.tab?.id;
     if (!tabId) { sendResponse({ ok: false, reason: "no tab id" }); return; }

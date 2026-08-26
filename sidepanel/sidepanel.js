@@ -750,36 +750,13 @@ async function downloadGeneratedImages(newUrls, serialNum, promptText) {
     const filename = `${folder}/${prefix}${baseName}${suffix}.${ext}`;
 
     try {
-      let downloadUrl = url;
-      let isBlobCreated = false;
-
-      // Convert remote HTTP/HTTPS URL into a local Blob URL to force Chrome
-      // to use our custom filename instead of CDN server header hashes (AF88x...)
-      if (url.startsWith("http")) {
-        try {
-          const res = await fetch(url);
-          if (res.ok) {
-            const blob = await res.blob();
-            downloadUrl = URL.createObjectURL(blob);
-            isBlobCreated = true;
-          }
-        } catch (fetchErr) {
-          console.warn("[Mani's Flow] Fetch blob failed, falling back to direct URL:", fetchErr);
-        }
-      }
-
-      await chrome.downloads.download({
-        url: downloadUrl,
+      await chrome.runtime.sendMessage({
+        type: "DOWNLOAD_FILE",
+        url: url,
         filename: filename,
-        saveAs: false,
-        conflictAction: "uniquify",
       });
-
-      if (isBlobCreated) {
-        setTimeout(() => URL.revokeObjectURL(downloadUrl), 15000);
-      }
     } catch (e) {
-      console.warn("[Mani's Flow] Download failed:", e);
+      console.warn("[Mani's Flow] Download failed via background:", e);
     }
   }
 }
